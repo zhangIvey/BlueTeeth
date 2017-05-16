@@ -34,22 +34,24 @@
     [self.view addSubview:_tableView];
     
     // Do any additional setup after loading the view, typically from a nib.
-    dispatch_queue_t queue = dispatch_queue_create("blueTeethQueue", DISPATCH_QUEUE_CONCURRENT); //创建一个并行队列；
-    NSDictionary *options = [NSDictionary dictionaryWithObjectsAndKeys:[NSNumber numberWithBool:YES],CBCentralManagerOptionShowPowerAlertKey,@"zStrapRestoreIdentifier",CBCentralManagerOptionRestoreIdentifierKey ,nil];
+//    dispatch_queue_t queue = dispatch_queue_create("blueTeethQueue", DISPATCH_QUEUE_CONCURRENT); //创建一个并行队列；
+//    NSDictionary *options = [NSDictionary dictionaryWithObjectsAndKeys:[NSNumber numberWithBool:YES],CBCentralManagerOptionShowPowerAlertKey,@"zStrapRestoreIdentifier",CBCentralManagerOptionRestoreIdentifierKey ,nil];
     
-    _centralManager = [[CBCentralManager alloc] initWithDelegate:self queue:nil options:nil]; //先使用主队列进行开发
     /*
-    CBCentralManagerOptionShowPowerAlertKey
-    布尔值，表示的是在central manager初始化时，如果当前蓝牙没打开，是否弹出alert框。
-    CBCentralManagerOptionRestoreIdentifierKey
-    CBCentralManagerOptionRestoreIdentifierKey，字符串，一个唯一的标示符，用来蓝牙的恢复连接的。在后台的长连接中可能会用到。
-    就是说，如果蓝牙程序进入后台，程序会被挂起，可能由于memory pressure，程序被系统kill了，那么代理方法就不会执行了。这时候可以使用State Preservation & Restoration，这样程序会重新加载进入后台。
-    调试iOS蓝牙的时候，可以下个LightBlue，非常方便，网上也有仿写LightBlue的Demo，参考这两处：
-https://github.com/chenee/DarkBlue
-http://boxertan.github.io/blog/2014/07/07/xue-xi-ioslan-ya-ji-zhu-%2Cfang-xie-lightblue/
-    使用scanForPeripheralsWithServices:options: 来扫描外设
+     CBCentralManagerOptionShowPowerAlertKey
+     布尔值，表示的是在central manager初始化时，如果当前蓝牙没打开，是否弹出alert框。
+     CBCentralManagerOptionRestoreIdentifierKey
+     CBCentralManagerOptionRestoreIdentifierKey，字符串，一个唯一的标示符，用来蓝牙的恢复连接的。在后台的长连接中可能会用到。
+     就是说，如果蓝牙程序进入后台，程序会被挂起，可能由于memory pressure，程序被系统kill了，那么代理方法就不会执行了。这时候可以使用State Preservation & Restoration，这样程序会重新加载进入后台。
+     调试iOS蓝牙的时候，可以下个LightBlue，非常方便，网上也有仿写LightBlue的Demo，参考这两处：
+     https://github.com/chenee/DarkBlue
+     http://boxertan.github.io/blog/2014/07/07/xue-xi-ioslan-ya-ji-zhu-%2Cfang-xie-lightblue/
+     使用scanForPeripheralsWithServices:options: 来扫描外设
      */
     
+    //创建一个中心蓝牙的管理器
+    _centralManager = [[CBCentralManager alloc] initWithDelegate:self queue:nil options:nil]; //先使用主队列进行开发
+
 }
 \
 
@@ -61,9 +63,11 @@ http://boxertan.github.io/blog/2014/07/07/xue-xi-ioslan-ya-ji-zhu-%2Cfang-xie-li
     if (cell == nil) {
         cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:cellIdentify];
     }
-    CBPeripheral *peripheral = (CBPeripheral *)[_deviceArray objectAtIndex:indexPath.row];
+    NSDictionary *peripheralDic = (NSDictionary *)[_deviceArray objectAtIndex:indexPath.row];
+    CBPeripheral *peripheral = (CBPeripheral *)[peripheralDic objectForKey:@"peripheral"];
     cell.textLabel.text = peripheral.name;
     NSLog(@"peripheral.name = %@",peripheral.name);
+    NSLog(@"RSSI = %@",[peripheralDic objectForKey:@"RSSI"]);
     NSLog(@"peripheral.identifier = %@",peripheral.identifier);
     return cell;
 }
@@ -73,28 +77,45 @@ http://boxertan.github.io/blog/2014/07/07/xue-xi-ioslan-ya-ji-zhu-%2Cfang-xie-li
     return _deviceArray.count;
 }
 
+//点击某个cell，进行外设的连接
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath
 {
-    [_centralManager stopScan];
-    CBPeripheral *peripheral = (CBPeripheral *)[_deviceArray objectAtIndex:indexPath.row];
-    peripheral.delegate = self;
-    //进行链接
+    
+    
+    NSDictionary *peripheralDic = (NSDictionary *)[_deviceArray objectAtIndex:indexPath.row];
+    CBPeripheral *peripheral = (CBPeripheral *)[peripheralDic objectForKey:@"peripheral"];
+    
+    //连接某个蓝牙外设
     [_centralManager connectPeripheral:peripheral options:nil];
+    //设置蓝牙外设的代理；
+    peripheral.delegate = self;
+    //停止中心蓝牙的扫描动作
+    [_centralManager stopScan];
 }
 
 #pragma mark - centralManager's delegate method
 
-//中心蓝牙控制前的状态监听方法
+/*
+ 中心蓝牙控制前的状态监听方法。在中心蓝牙管理器创建完成之后，会调用该方法，进行对中心蓝牙状态的监听。每当蓝牙模块的状态发生改变时，该方法就会被调用和执行
+ */
+
 - (void)centralManagerDidUpdateState:(CBCentralManager *)central
 {
     if (central.state == CBCentralManagerStatePoweredOn) {
         NSLog(@"设备开启状态 -- 可用状态");
         
-        //开始进行扫描
-        NSDictionary *option = [NSDictionary dictionaryWithObjectsAndKeys:[NSNumber numberWithBool:NO],CBCentralManagerScanOptionAllowDuplicatesKey, nil];
-       // CBCentralManagerScanOptionAllowDuplicatesKey，bool值，为NO，表示不会重复扫描已经发现的设备。
         
+        
+        // CBCentralManagerScanOptionAllowDuplicatesKey，bool值，为NO，表示不会重复扫描已经发现的设备。
+        NSDictionary *option = [NSDictionary dictionaryWithObjectsAndKeys:[NSNumber numberWithBool:NO],CBCentralManagerScanOptionAllowDuplicatesKey, nil];
+        
+        //在确定蓝牙模块可用的情况下，开启进行扫描
+        /*
+         1：第一个参数：服务的CBUUID的数组，我们可以根据数组中的CBUUID检索某一类服务的蓝牙设备；
+         2：第二个参数：
+         */
         [central scanForPeripheralsWithServices:nil options:option];
+        
     }else if (central.state == CBCentralManagerStatePoweredOff){
         NSLog(@"关闭状态");
     }else if (central.state == CBCentralManagerStateUnknown){
@@ -102,43 +123,83 @@ http://boxertan.github.io/blog/2014/07/07/xue-xi-ioslan-ya-ji-zhu-%2Cfang-xie-li
     }else if (central.state == CBCentralManagerStateResetting){
         NSLog(@"正在重置状态");
     }else if (central.state == CBCentralManagerStateUnsupported){
-        NSLog(@"不支持");
+        NSLog(@"SDK不支持");
     }else if (central.state == CBCentralManagerStateUnauthorized){
         NSLog(@"未授权");
     }
 }
 
+/*
+ 在中心蓝牙扫描到外设蓝牙后调用该方法。
+ 该方法每次只返回一个蓝牙外设的信息
+ 第一个参数：中心蓝牙对象
+ 第二个参数：本次扫描到的蓝牙外设
+ 第三个参数：蓝牙外设中的额外信息，——蓝牙外设的广播包中的信息。
+ 第四个参数：代表信号强度的参数，RSSI:（要做详细介绍）
+ 
+ 注意：扫描的蓝牙设备有以下几种情况：
+ 1：扫描的蓝牙是无用的蓝牙。
+ 2：扫描的蓝牙是重复扫描到的蓝牙。（存在一种可能就是重复扫描到的蓝牙有变化，这种变化不是指蓝牙外设携带的数据发生变化，是指蓝牙外设本身的参数发生变化）
+ 
+ 所有针对上述的两种情况，我们需要一段代码进行逻辑上的处理：
+ 1：剔除无用的蓝牙。
+ 2：替换到的旧信息蓝牙外设，插入新的蓝牙外设信息。
+ */
 
 - (void)centralManager:(CBCentralManager *)central didDiscoverPeripheral:(CBPeripheral *)peripheral advertisementData:(NSDictionary<NSString *, id> *)advertisementData RSSI:(NSNumber *)RSSI
 {
+    /*
+     思考：所有的蓝牙外设都必须要有 name 吗？
+     */
+    if (peripheral.name.length <= 0) {
+        return;
+    }
+    
+    //打印参数信息
     NSLog(@"发现外部设备");
     NSLog(@"接收到的广播信息：%@",advertisementData);
-    NSLog(@"打印设备信息：设备名称：%@ 信号强度：%@",peripheral.name, RSSI);
-    _peripheral = peripheral;
-    _peripheral.delegate = self;
+    NSLog(@"蓝牙外设信息：设备identifier ： %@ 设备名称：%@ 信号强度：%@", peripheral.identifier,peripheral.name, RSSI);
     
-    [_deviceArray addObject:_peripheral];
-    [_tableView beginUpdates];
-     [self.tableView insertRowsAtIndexPaths:[NSArray arrayWithObject:[NSIndexPath indexPathForRow:0 inSection:0]] withRowAnimation:UITableViewRowAnimationFade];
-    [_tableView endUpdates];
-
-
-//    [central stopScan];
-    //发起链接
-//    NSLog(@"发起链接");
-//    NSDictionary *options = [NSDictionary dictionaryWithObjectsAndKeys:CBConnectPeripheralOptionNotifyOnConnectionKey,YES,CBConnectPeripheralOptionNotifyOnDisconnectionKey,YES,nil];
     
-//    [central connectPeripheral:peripheral options:nil];
+    if (_deviceArray.count <= 0) {
+        
+        NSDictionary *peripheralDic = [NSDictionary dictionaryWithObjectsAndKeys:peripheral,@"peripheral",RSSI,@"RSSI", nil];
+        [_deviceArray addObject:peripheralDic];
+        
+    }else{
+        bool isExist = NO;
+        for (int i = 0; i < _deviceArray.count ; i ++) {
+            NSDictionary *peripheralDic = [_deviceArray objectAtIndex:i];
+            CBPeripheral *peripheralFromArray = [peripheralDic objectForKey:@"peripheral"];
+            if ([peripheralFromArray.identifier.UUIDString isEqualToString:peripheral.identifier.UUIDString]) {
+                isExist = YES;
+                NSDictionary *newPeripheralDic = [NSDictionary dictionaryWithObjectsAndKeys:peripheral,@"peripheral",RSSI,@"RSSI", nil];
+                [_deviceArray replaceObjectAtIndex:i withObject:newPeripheralDic];
+            }
+        }
+        if (!isExist) {
+            NSDictionary *newPeripheralDic = [NSDictionary dictionaryWithObjectsAndKeys:peripheral,@"peripheral",RSSI,@"RSSI", nil];
+            [_deviceArray addObject:newPeripheralDic];
+        }
+        
+    }
+    
+    [_tableView reloadData];
 }
 
+/**
+ 中心蓝牙和某个外设连接成功。
+ */
 - (void)centralManager:(CBCentralManager *)central didConnectPeripheral:(CBPeripheral *)peripheral
 {
     NSLog(@"和外设链接成功");
-//    CBUUID *uuid = [CBUUID UUIDWithString:<#(nonnull NSString *)#>]
-//    
-//    [_peripheral discoverCharacteristics:<#(nullable NSArray<CBUUID *> *)#> forService:<#(nonnull CBService *)#>]
+    //设备连接成功，开始查找建立连接的蓝牙外设的服务；此处要注意，在建立连接之后，是通过蓝牙外设的对象去发现服务而非中心蓝牙。
+    [peripheral discoverServices:nil];
 }
 
+/**
+ 中心蓝牙和某个外设连接失败。
+ */
 - (void)centralManager:(CBCentralManager *)central didFailToConnectPeripheral:(CBPeripheral *)peripheral error:(nullable NSError *)error
 {
     NSLog(@"和外设链接失败");
@@ -173,10 +234,15 @@ http://boxertan.github.io/blog/2014/07/07/xue-xi-ioslan-ya-ji-zhu-%2Cfang-xie-li
 
 }
 
-
+/**
+ 在发现服务时，进行调用
+ */
 - (void)peripheral:(CBPeripheral *)peripheral didDiscoverServices:(nullable NSError *)error
 {
-    
+    //遍历所提供的服务
+    for (CBService *service in peripheral.services) {
+        
+    }
 }
 
 - (void)peripheral:(CBPeripheral *)peripheral didDiscoverIncludedServicesForService:(CBService *)service error:(nullable NSError *)error
