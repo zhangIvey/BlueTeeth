@@ -77,7 +77,7 @@
 - (void)doScan {
     NSLog(@"开始扫描蓝夜外设");
     if ([_centralManager isScanning]) {
-        
+        [_centralManager stopScan];
     }
     NSDictionary *option = [NSDictionary dictionaryWithObjectsAndKeys:[NSNumber numberWithBool:NO],CBCentralManagerScanOptionAllowDuplicatesKey, nil];
     [_centralManager scanForPeripheralsWithServices:nil options:option];
