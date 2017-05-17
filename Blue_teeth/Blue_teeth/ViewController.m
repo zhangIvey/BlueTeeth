@@ -22,6 +22,9 @@
 
 @implementation ViewController
 
+#define WholeHeight [UIScreen mainScreen].bounds.size.height
+#define WholeWidth [UIScreen mainScreen].bounds.size.width
+
 - (void)viewDidLoad {
     [super viewDidLoad];
     self.view.backgroundColor = [UIColor whiteColor];
@@ -32,6 +35,23 @@
     _tableView.delegate = self;
     _tableView.dataSource = self;
     [self.view addSubview:_tableView];
+
+    
+
+    UIButton *scanButton = [[UIButton alloc] initWithFrame:CGRectMake(10, WholeHeight - 60, 100, 40)];
+    [scanButton setTitle:@"点击扫描" forState:UIControlStateNormal];
+    [scanButton setBackgroundColor:[UIColor blueColor]];
+    [scanButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+    [scanButton addTarget:self action:@selector(doScan) forControlEvents:UIControlEventTouchUpInside];
+    [self.view addSubview:scanButton];
+    
+    UIButton *cancelButton = [[UIButton alloc] initWithFrame:CGRectMake(scanButton.frame.origin.x + scanButton.frame.size.width + 60, WholeHeight - 60, 100, 40)];
+    [cancelButton setTitle:@"取消链接" forState:UIControlStateNormal];
+    [cancelButton setBackgroundColor:[UIColor redColor]];
+    [cancelButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+    [cancelButton addTarget:self action:@selector(cancelConnection) forControlEvents:UIControlEventTouchUpInside];
+    [self.view addSubview:cancelButton];
+    
     
     // Do any additional setup after loading the view, typically from a nib.
 //    dispatch_queue_t queue = dispatch_queue_create("blueTeethQueue", DISPATCH_QUEUE_CONCURRENT); //创建一个并行队列；
@@ -52,8 +72,29 @@
     //创建一个中心蓝牙的管理器
     _centralManager = [[CBCentralManager alloc] initWithDelegate:self queue:nil options:nil]; //先使用主队列进行开发
 
+
 }
-\
+- (void)doScan {
+    NSLog(@"开始扫描蓝夜外设");
+    if ([_centralManager isScanning]) {
+        
+    }
+    NSDictionary *option = [NSDictionary dictionaryWithObjectsAndKeys:[NSNumber numberWithBool:NO],CBCentralManagerScanOptionAllowDuplicatesKey, nil];
+    [_centralManager scanForPeripheralsWithServices:nil options:option];
+}
+
+- (void)cancelConnection {
+    NSLog(@"断开已经建立的蓝牙连接");
+   
+    if ( [_centralManager isScanning]) {
+        return;
+    }
+    if (_peripheral != nil) {
+        [_centralManager cancelPeripheralConnection:_peripheral];
+        _peripheral = nil;
+    }
+    
+}
 
 #pragma mark - tableView's delegate method 
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath
@@ -214,7 +255,7 @@
 
 - (void)peripheralDidUpdateName:(CBPeripheral *)peripheral
 {
-    NSLog(@"");
+    
 }
 
 
@@ -239,9 +280,20 @@
  */
 - (void)peripheral:(CBPeripheral *)peripheral didDiscoverServices:(nullable NSError *)error
 {
+    NSString *UUID = [peripheral.identifier UUIDString];
+    NSLog(@"在didDiscoverServices方法中，peripheral.identifier = %@",UUID);
+    
     //遍历所提供的服务
     for (CBService *service in peripheral.services) {
+        CBUUID *serviceUUID = service.UUID;
+        NSLog(@"serviceUUID = %@",[serviceUUID UUIDString]);
         
+        
+        /**
+         如果我们知道要查询的特性的 CBUUID，可以在第一个参数中传入 CBUUID 的数组
+         发现在服务下的特征
+         */
+        [peripheral discoverCharacteristics:nil forService:service];
     }
 }
 
@@ -250,15 +302,79 @@
 
 }
 
-
+/**
+ 在发现服务中的特征后，调用该方法
+ 
+ */
 - (void)peripheral:(CBPeripheral *)peripheral didDiscoverCharacteristicsForService:(CBService *)service error:(nullable NSError *)error
 {
-
+    if (error) {
+        NSLog(@"在检索服务中的特征时出错");
+        return;
+    }
+    
+    NSLog(@"在 didDiscoverCharacteristicsForService 方法中遍历服务 %@ 中的特征",[service.UUID UUIDString]);
+    for (CBCharacteristic *characteristic in service.characteristics) {
+        
+        NSLog(@"特征 UUID = %@",[characteristic.UUID UUIDString]);
+       
+        /**
+         在这里要注意，很多同学看到是枚举类型就是用的 == ，这是不对的，
+         学习链接：http://lecason.com/2015/08/19/Objective-C-Find-Conbine/
+         */
+//#define BLUE_READ_UUID  @"1526" //蓝牙数据读取
+//#define BLUE_WRITE_UUID @"1527" //蓝牙数据写入
+//#define BLUE_CFGRD_UUID @"1528" //配置数据读取
+//#define BLUE_CFGWR_UUID @"1529" //配置数据写入
+        if (characteristic.properties & CBCharacteristicPropertyExtendedProperties) {
+            NSLog(@"具备可拓展特性。");
+        }
+        if (characteristic.properties & CBCharacteristicPropertyRead) {
+            NSLog(@"具备可读特性，即可以读取特征的 value 值");
+            //对该特征进行读取
+            [peripheral readValueForCharacteristic:characteristic];
+        }
+        if (characteristic.properties & CBCharacteristicPropertyWrite) {
+            NSLog(@"具备可写特征，会有响应");
+            
+        }
+        if (characteristic.properties & CBCharacteristicPropertyNotify) {
+            NSLog(@"具备通知特性，无响应");
+            //对该特征设置通知的监听
+            [peripheral setNotifyValue:YES forCharacteristic:characteristic];
+            [peripheral readValueForCharacteristic:characteristic];
+        }
+        if (characteristic.properties & CBCharacteristicPropertyIndicate) {
+            NSLog(@"具备指示特性");
+        }
+        if (characteristic.properties & CBCharacteristicPropertyBroadcast) {
+            NSLog(@"具备广播特性");
+            //对该特征设置通知的监听
+            [peripheral setNotifyValue:YES forCharacteristic:characteristic];
+            [peripheral readValueForCharacteristic:characteristic];
+        }
+        if (characteristic.properties & CBCharacteristicPropertyWriteWithoutResponse) {
+            NSLog(@"具备可写，又不会有响应的特性");
+        }
+    }
+    
 }
 
+/**
+ 获取特征的值后调用的方法
+ */
 - (void)peripheral:(CBPeripheral *)peripheral didUpdateValueForCharacteristic:(CBCharacteristic *)characteristic error:(nullable NSError *)error
 {
-
+    NSLog(@"didUpdateValueForCharacteristic : characteristic.uuid = %@",[characteristic.UUID UUIDString]);
+    if (error) {
+        NSLog(@"读取特征失败！");
+    }
+    NSData *data = characteristic.value;
+    if (data.length <= 0) {
+        return;
+    }
+    NSString *info = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
+    NSLog(@"info = %@",info);
 }
 
 - (void)peripheral:(CBPeripheral *)peripheral didWriteValueForCharacteristic:(CBCharacteristic *)characteristic error:(nullable NSError *)error
@@ -266,16 +382,28 @@
 
 }
 
+/**
+ 在对具备通知特性的特征设置监听之后，当特征有变化，接收到通知，执行下面方法。
+ */
 - (void)peripheral:(CBPeripheral *)peripheral didUpdateNotificationStateForCharacteristic:(CBCharacteristic *)characteristic error:(nullable NSError *)error
 {
-
+    NSLog(@"didUpdateNotificationStateForCharacteristic : characteristic.uuid = %@",[characteristic.UUID UUIDString]);
+    if (error) {
+        NSLog(@"在监听通知后发生错误");
+        return;
+    }
+    [peripheral readValueForCharacteristic:characteristic];
+//    if (characteristic.properties & CBCharacteristicPropertyRead) {
+//        //如果该特征同时具备可读特性，我们可以直接对特征进行读取
+//        [peripheral readValueForCharacteristic:characteristic];
+//    }
+    
 }
 
 - (void)peripheral:(CBPeripheral *)peripheral didDiscoverDescriptorsForCharacteristic:(CBCharacteristic *)characteristic error:(nullable NSError *)error
 {
     NSLog(@"发现外设的特征");
     
-//    NSLog(@"======打印外设的特征：characteristic = %@",)
 }
 
 - (void)peripheral:(CBPeripheral *)peripheral didUpdateValueForDescriptor:(CBDescriptor *)descriptor error:(nullable NSError *)error
