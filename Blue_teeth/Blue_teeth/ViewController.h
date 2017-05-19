@@ -10,7 +10,8 @@
 #import <CoreBluetooth/CoreBluetooth.h>
 
 @interface ViewController : UIViewController
-
++ (NSString*)byteToString:(NSData*)data;
++ (NSData*)stringToByte:(NSString*)string;
 
 @end
 

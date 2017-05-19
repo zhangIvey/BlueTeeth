@@ -134,6 +134,55 @@
     [_centralManager stopScan];
 }
 
+#pragma mark - Str转NSData
++ (NSData*)stringToByte:(NSString*)string {
+    NSString *hexString=[[string uppercaseString] stringByReplacingOccurrencesOfString:@" " withString:@""];
+    if ([hexString length]%2!=0) {
+        return nil;
+    }
+    Byte tempbyt[1]={0};
+    NSMutableData* bytes=[NSMutableData data];
+    for(int i=0;i<[hexString length];i++)
+    {
+        unichar hex_char1 = [hexString characterAtIndex:i]; ////两位16进制数中的第一位(高位*16)
+        int int_ch1;
+        if(hex_char1 >= '0' && hex_char1 <='9')
+            int_ch1 = (hex_char1-48)*16;   //// 0 的Ascll - 48
+        else if(hex_char1 >= 'A' && hex_char1 <='F')
+            int_ch1 = (hex_char1-55)*16; //// A 的Ascll - 65
+        else
+            return nil;
+        i++;
+        
+        unichar hex_char2 = [hexString characterAtIndex:i]; ///两位16进制数中的第二位(低位)
+        int int_ch2;
+        if(hex_char2 >= '0' && hex_char2 <='9')
+            int_ch2 = (hex_char2-48); //// 0 的Ascll - 48
+        else if(hex_char2 >= 'A' && hex_char2 <='F')
+            int_ch2 = hex_char2-55; //// A 的Ascll - 65
+        else
+            return nil;
+        
+        tempbyt[0] = int_ch1+int_ch2;  ///将转化后的数放入Byte数组里
+        [bytes appendBytes:tempbyt length:1];
+    }
+    return bytes;
+}
+#pragma mark - NSData转Str
++ (NSString*)byteToString:(NSData*)data {
+    Byte *plainTextByte = (Byte *)[data bytes];
+    NSString *hexStr=@"";
+    for(int i=0;i<[data length];i++)
+    {
+        NSString *newHexStr = [NSString stringWithFormat:@"%x",plainTextByte[i]&0xff];///16进制数
+        if([newHexStr length]==1)
+            hexStr = [NSString stringWithFormat:@"%@0%@",hexStr,newHexStr];
+        else
+            hexStr = [NSString stringWithFormat:@"%@%@",hexStr,newHexStr];
+    }
+    return hexStr;
+}
+
 #pragma mark - centralManager's delegate method
 
 /*
@@ -336,7 +385,9 @@
         }
         if (characteristic.properties & CBCharacteristicPropertyWrite) {
             NSLog(@"具备可写特征，会有响应");
-            [peripheral writeValue:<#(nonnull NSData *)#> forCharacteristic:characteristic type:CBCharacteristicWriteWithResponse];
+        
+            NSString *stringD = @"要写入的数据";
+            [peripheral writeValue:[ViewController stringToByte:stringD] forCharacteristic:characteristic type:CBCharacteristicWriteWithResponse];
         }
         if (characteristic.properties & CBCharacteristicPropertyNotify) {
             NSLog(@"具备通知特性，无响应");
@@ -357,57 +408,8 @@
             NSLog(@"具备可写，又不会有响应的特性");
         }
     }
-    
 }
 
-#pragma mark - Str转NSData
-+ (NSData*)stringToByte:(NSString*)string {
-    NSString *hexString=[[string uppercaseString] stringByReplacingOccurrencesOfString:@" " withString:@""];
-    if ([hexString length]%2!=0) {
-        return nil;
-    }
-    Byte tempbyt[1]={0};
-    NSMutableData* bytes=[NSMutableData data];
-    for(int i=0;i<[hexString length];i++)
-    {
-        unichar hex_char1 = [hexString characterAtIndex:i]; ////两位16进制数中的第一位(高位*16)
-        int int_ch1;
-        if(hex_char1 >= '0' && hex_char1 <='9')
-            int_ch1 = (hex_char1-48)*16;   //// 0 的Ascll - 48
-        else if(hex_char1 >= 'A' && hex_char1 <='F')
-            int_ch1 = (hex_char1-55)*16; //// A 的Ascll - 65
-        else
-            return nil;
-        i++;
-        
-        unichar hex_char2 = [hexString characterAtIndex:i]; ///两位16进制数中的第二位(低位)
-        int int_ch2;
-        if(hex_char2 >= '0' && hex_char2 <='9')
-            int_ch2 = (hex_char2-48); //// 0 的Ascll - 48
-        else if(hex_char2 >= 'A' && hex_char2 <='F')
-            int_ch2 = hex_char2-55; //// A 的Ascll - 65
-        else
-            return nil;
-        
-        tempbyt[0] = int_ch1+int_ch2;  ///将转化后的数放入Byte数组里
-        [bytes appendBytes:tempbyt length:1];
-    }
-    return bytes;
-}
-#pragma mark - NSData转Str
-+ (NSString*)byteToString:(NSData*)data {
-    Byte *plainTextByte = (Byte *)[data bytes];
-    NSString *hexStr=@"";
-    for(int i=0;i<[data length];i++)
-    {
-        NSString *newHexStr = [NSString stringWithFormat:@"%x",plainTextByte[i]&0xff];///16进制数
-        if([newHexStr length]==1)
-            hexStr = [NSString stringWithFormat:@"%@0%@",hexStr,newHexStr];
-        else
-            hexStr = [NSString stringWithFormat:@"%@%@",hexStr,newHexStr];
-    }
-    return hexStr;
-}
 
 /**
  获取特征的值后调用的方法
@@ -437,10 +439,16 @@
 //    NSString *info = [[NSString alloc] initWithData:characteristic.value encoding:NSUTF8StringEncoding];
     NSLog(@"hexStr = %@",hexStr);
 }
-
+/**
+    在向蓝牙设备中写完指令后，调用的回调方法。
+ */
 - (void)peripheral:(CBPeripheral *)peripheral didWriteValueForCharacteristic:(CBCharacteristic *)characteristic error:(nullable NSError *)error
 {
-
+    if (error) {
+        NSLog(@"didWriteValueForCharacteristic，在写入指令时发生错误");
+        return;
+    }
+    NSLog(@"对蓝牙的指令写入成功！");
 }
 
 /**
