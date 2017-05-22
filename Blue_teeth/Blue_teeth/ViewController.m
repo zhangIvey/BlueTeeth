@@ -54,22 +54,19 @@
     
     
     // Do any additional setup after loading the view, typically from a nib.
-//    dispatch_queue_t queue = dispatch_queue_create("blueTeethQueue", DISPATCH_QUEUE_CONCURRENT); //创建一个并行队列；
-//    NSDictionary *options = [NSDictionary dictionaryWithObjectsAndKeys:[NSNumber numberWithBool:YES],CBCentralManagerOptionShowPowerAlertKey,@"zStrapRestoreIdentifier",CBCentralManagerOptionRestoreIdentifierKey ,nil];
     
-    /*
-     CBCentralManagerOptionShowPowerAlertKey
-     布尔值，表示的是在central manager初始化时，如果当前蓝牙没打开，是否弹出alert框。
-     CBCentralManagerOptionRestoreIdentifierKey
-     CBCentralManagerOptionRestoreIdentifierKey，字符串，一个唯一的标示符，用来蓝牙的恢复连接的。在后台的长连接中可能会用到。
-     就是说，如果蓝牙程序进入后台，程序会被挂起，可能由于memory pressure，程序被系统kill了，那么代理方法就不会执行了。这时候可以使用State Preservation & Restoration，这样程序会重新加载进入后台。
-     调试iOS蓝牙的时候，可以下个LightBlue，非常方便，网上也有仿写LightBlue的Demo，参考这两处：
-     https://github.com/chenee/DarkBlue
-     http://boxertan.github.io/blog/2014/07/07/xue-xi-ioslan-ya-ji-zhu-%2Cfang-xie-lightblue/
-     使用scanForPeripheralsWithServices:options: 来扫描外设
-     */
     
     //创建一个中心蓝牙的管理器
+    /**
+     参数说明：
+     delegate : 有经验的同学就不用过多解释了，设置好代理，各种回调方法的使用
+     queue ： 多线程队列，如果传入了队列参数，中心蓝牙会在该线程中处理和接收事件 如果为nil的话，默认在主队列里面
+     options ： 一系列的参数设置 ：
+     |CBCentralManagerOptionShowPowerAlertKey    |  表示的是在central manager初始化时，如果当前蓝牙没打开，是否弹出alert框  |
+     
+     |CBCentralManagerOptionRestoreIdentifierKey | 一个唯一的标示符，用来蓝牙的恢复连接的。在后台的长连接中可能会用到。
+     就是说，如果蓝牙程序进入后台，程序会被挂起，可能由于memory pressure，程序被系统kill了，那么代理方法就不会执行了。这时候可以使用State Preservation & Restoration，这样程序会重新加载进入后台。|
+     */
     _centralManager = [[CBCentralManager alloc] initWithDelegate:self queue:nil options:nil]; //先使用主队列进行开发
 
 
@@ -79,7 +76,15 @@
     if ([_centralManager isScanning]) {
         [_centralManager stopScan];
     }
-    NSDictionary *option = [NSDictionary dictionaryWithObjectsAndKeys:[NSNumber numberWithBool:NO],CBCentralManagerScanOptionAllowDuplicatesKey, nil];
+    NSDictionary *option = [NSDictionary dictionaryWithObjectsAndKeys:[NSNumber numberWithBool:YES],CBCentralManagerScanOptionAllowDuplicatesKey, nil];
+    
+    //开始中心蓝牙的扫描事务
+    /**
+     serviceUUIDs : 包含一个或者多个服务UUID的集合，会根据服务的UUID来进行设备的扫描，
+     options : 一系列的参数设置
+     | CBCentralManagerScanOptionAllowDuplicatesKey       | |
+     | CBCentralManagerScanOptionSolicitedServiceUUIDsKey | |
+     */
     [_centralManager scanForPeripheralsWithServices:nil options:option];
 }
 
@@ -125,7 +130,13 @@
     
     NSDictionary *peripheralDic = (NSDictionary *)[_deviceArray objectAtIndex:indexPath.row];
     CBPeripheral *peripheral = (CBPeripheral *)[peripheralDic objectForKey:@"peripheral"];
-    
+    /**
+     peripheral : 要进行连接的外设
+     options ：在链接过程中的一系列参数设置
+     CBConnectPeripheralOptionNotifyOnConnectionKey ：连接通知
+     CBConnectPeripheralOptionNotifyOnDisconnectionKey ： 断开连接通知
+     CBConnectPeripheralOptionNotifyOnNotificationKey ：
+     */
     //连接某个蓝牙外设
     [_centralManager connectPeripheral:peripheral options:nil];
     //设置蓝牙外设的代理；
@@ -295,6 +306,9 @@
     NSLog(@"和外设链接失败");
 }
 
+/**
+ 中心蓝牙和某个外设断开连接成功。
+ */
 - (void)centralManager:(CBCentralManager *)central didDisconnectPeripheral:(CBPeripheral *)peripheral error:(nullable NSError *)error
 {
     NSLog(@"和外设断开连接");
